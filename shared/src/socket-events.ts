@@ -20,6 +20,12 @@ export type Ack<T = undefined> = { ok: true; data: T } | { ok: false; error: str
 export interface PlayerJoinPayload {
   roomCode: string;
   nickname: string;
+  /**
+   * Persistent identity for this player, issued on first join and stored on the
+   * device. Presenting it on a later join reattaches to the same player instead
+   * of creating a new one — enabling resume after a refresh or a dropped socket.
+   */
+  playerToken?: string;
 }
 
 export interface HostJoinPayload {
@@ -29,6 +35,9 @@ export interface HostJoinPayload {
 
 export interface JoinedData {
   playerId: string;
+  /** Store this on the device and send it back on future joins to resume. */
+  playerToken: string;
+  nickname: string;
   status: GameStatus;
   players: PublicPlayer[];
 }

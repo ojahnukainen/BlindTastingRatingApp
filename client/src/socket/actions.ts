@@ -1,5 +1,6 @@
 import type { RatingInput } from '@blind/shared';
 import { useGameStore } from '../store/gameStore';
+import { getPlayerSession, savePlayerSession } from '../store/playerStorage';
 import { getSocket } from './socket';
 
 const ACK_TIMEOUT_MS = 15_000;
@@ -14,17 +15,34 @@ function ensureConnected() {
 
 export async function joinAsPlayer(roomCode: string, nickname: string): Promise<boolean> {
   try {
-    const res = await ensureConnected().emitWithAck('player:join', { roomCode, nickname });
+    // Reuse a stored token so the server reattaches us to our existing player.
+    const stored = getPlayerSession(roomCode);
+    const res = await ensureConnected().emitWithAck('player:join', {
+      roomCode,
+      nickname,
+      playerToken: stored?.playerToken,
+    });
     if (!res.ok) {
       useGameStore.getState().setError(res.error);
       return false;
     }
+    savePlayerSession(roomCode, {
+      playerToken: res.data.playerToken,
+      nickname: res.data.nickname,
+    });
     useGameStore.getState().setPlayerSession({ roomCode, ...res.data });
     return true;
   } catch {
     useGameStore.getState().setError('Could not reach the server. Check your connection and try again.');
     return false;
   }
+}
+
+/** Rejoin using the identity stored for this room, if any. Used on refresh/reconnect. */
+export async function resumePlayer(roomCode: string): Promise<boolean> {
+  const stored = getPlayerSession(roomCode);
+  if (!stored) return false;
+  return joinAsPlayer(roomCode, stored.nickname);
 }
 
 export async function joinAsHost(roomCode: string, hostToken: string): Promise<boolean> {

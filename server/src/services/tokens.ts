@@ -8,3 +8,5 @@ const makeRoomCode = customAlphabet(ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH);
 export const generateRoomCode = (): string => makeRoomCode();
 
 export const generateHostToken = (): string => nanoid(32);
+
+export const generatePlayerToken = (): string => nanoid(32);

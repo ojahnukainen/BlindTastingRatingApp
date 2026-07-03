@@ -5,6 +5,7 @@ import { Player } from '../models/Player';
 import {
   buildStartedData,
   computePersonalResults,
+  computeResults,
   finishGame,
   getProgress,
   listPublicPlayers,
@@ -12,6 +13,7 @@ import {
   startGame,
 } from '../services/gameService';
 import { toClientMessage } from '../services/ServiceError';
+import { generatePlayerToken } from '../services/tokens';
 import type { AppServer, AppSocket } from './types';
 
 /** Broadcast the current lobby roster to everyone in the room. */
@@ -37,9 +39,34 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
 
       const game = await Game.findOne({ roomCode });
       if (!game) return ack({ ok: false, error: 'Room not found' });
-      if (game.status === 'finished') return ack({ ok: false, error: 'This game has finished' });
 
-      const player = await Player.create({ gameId: game._id, nickname, socketId: socket.id });
+      // Reattach to an existing player when a valid token is presented — this is
+      // how a device resumes after a refresh or a socket drop (e.g. phone sleep).
+      const existing = payload.playerToken
+        ? await Player.findOne({ gameId: game._id, playerToken: payload.playerToken })
+        : null;
+
+      // A brand-new player can't join a game that has already finished; a
+      // returning player (with a token) is still allowed back to see results.
+      if (!existing && game.status === 'finished') {
+        return ack({ ok: false, error: 'This game has finished' });
+      }
+
+      let player = existing;
+      if (player) {
+        player.socketId = socket.id;
+        player.connected = true;
+        if (nickname) player.nickname = nickname;
+        await player.save();
+      } else {
+        player = await Player.create({
+          gameId: game._id,
+          nickname,
+          playerToken: generatePlayerToken(),
+          socketId: socket.id,
+        });
+      }
+
       socket.data.role = 'player';
       socket.data.gameId = game._id.toString();
       socket.data.roomCode = roomCode;
@@ -49,11 +76,23 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
       const players = await listPublicPlayers(game._id);
       io.to(roomCode).emit('lobby:playersUpdate', { players });
 
-      ack({ ok: true, data: { playerId: player._id.toString(), status: game.status, players } });
+      ack({
+        ok: true,
+        data: {
+          playerId: player._id.toString(),
+          playerToken: player.playerToken,
+          nickname: player.nickname,
+          status: game.status,
+          players,
+        },
+      });
 
-      // Late joiner during an active game: catch them up with the samples.
+      // Catch a (re)joining player up to the game's current phase.
       if (game.status === 'active') {
         socket.emit('game:started', buildStartedData(game));
+      } else if (game.status === 'finished') {
+        socket.emit('game:personalResults', await computePersonalResults(game, player._id.toString()));
+        socket.emit('game:finished', { results: await computeResults(game) });
       }
     } catch (error) {
       logger.error({ error }, 'player:join failed');

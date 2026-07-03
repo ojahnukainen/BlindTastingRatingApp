@@ -111,4 +111,36 @@ describe('socket game flow', () => {
     const ack = await emitAck<GameStartedData>(intruder, 'host:startGame');
     expect(ack.ok).toBe(false);
   });
+
+  it('reattaches to the same player when rejoining with the stored token', async () => {
+    const game = await createGame();
+    await setItems(game, ['A', 'B']);
+
+    const first = connect();
+    await waitFor(first, 'connect');
+    const join1 = await emitAck<JoinedData>(first, 'player:join', {
+      roomCode: game.roomCode,
+      nickname: 'Ann',
+    });
+    expect(join1.ok).toBe(true);
+    if (!join1.ok) return;
+    const { playerId, playerToken } = join1.data;
+
+    // Simulate the phone sleeping / a refresh: drop the socket, reconnect fresh.
+    first.disconnect();
+
+    const second = connect();
+    await waitFor(second, 'connect');
+    const join2 = await emitAck<JoinedData>(second, 'player:join', {
+      roomCode: game.roomCode,
+      nickname: 'Ann',
+      playerToken,
+    });
+    expect(join2.ok).toBe(true);
+    if (!join2.ok) return;
+
+    // Same identity, and no duplicate player was created.
+    expect(join2.data.playerId).toBe(playerId);
+    expect(join2.data.players).toHaveLength(1);
+  });
 });

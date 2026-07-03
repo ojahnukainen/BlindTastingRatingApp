@@ -23,6 +23,7 @@ describe('gameService lifecycle', () => {
     const player = await Player.create({
       gameId: game._id,
       nickname: 'Tess',
+      playerToken: 'tok-tess',
       socketId: 'sock-1',
     });
 
@@ -50,7 +51,12 @@ describe('gameService lifecycle', () => {
     const game = await createGame();
     await setItems(game, ['A', 'B']);
     await startGame(game);
-    const player = await Player.create({ gameId: game._id, nickname: 'Ann', socketId: 's' });
+    const player = await Player.create({
+      gameId: game._id,
+      nickname: 'Ann',
+      playerToken: 'tok-ann',
+      socketId: 's',
+    });
     const first = game.samples[0]!;
 
     await recordRating(game, player._id.toString(), {
@@ -74,7 +80,12 @@ describe('gameService lifecycle', () => {
     const game = await createGame();
     await setItems(game, ['Coke', 'Pepsi', 'Sprite']);
     await startGame(game);
-    const player = await Player.create({ gameId: game._id, nickname: 'Sam', socketId: 's' });
+    const player = await Player.create({
+      gameId: game._id,
+      nickname: 'Sam',
+      playerToken: 'tok-sam',
+      socketId: 's',
+    });
 
     // Guess correctly on the first sample only; rate every sample 4 stars.
     const [first, ...rest] = game.samples;

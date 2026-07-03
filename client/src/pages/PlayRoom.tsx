@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { NICKNAME_MAX } from '@blind/shared';
 import { Button } from '../components/Button';
@@ -6,9 +6,11 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { PlayBoard } from '../components/PlayBoard';
 import { PlayersList } from '../components/PlayersList';
 import { ResultsView } from '../components/ResultsView';
-import { joinAsPlayer } from '../socket/actions';
+import { joinAsPlayer, resumePlayer } from '../socket/actions';
+import { getSocket } from '../socket/socket';
 import { useLiveGame } from '../socket/useLiveGame';
 import { useGameStore } from '../store/gameStore';
+import { getPlayerSession } from '../store/playerStorage';
 
 export function PlayRoom() {
   const { code = '' } = useParams();
@@ -22,10 +24,25 @@ export function PlayRoom() {
   const results = useGameStore((state) => state.results);
   const personalResults = useGameStore((state) => state.personalResults);
 
-  const [nickname, setNickname] = useState('');
+  const [nickname, setNickname] = useState(() => getPlayerSession(roomCode)?.nickname ?? '');
   const [joining, setJoining] = useState(false);
 
   const isJoined = role === 'player' && joinedRoom === roomCode;
+
+  // Resume automatically on (re)connect if this device already joined this room.
+  // Covers a page refresh and a socket dropped by the phone going to sleep — the
+  // server reattaches us to the same player via the stored token.
+  useEffect(() => {
+    const socket = getSocket();
+    const tryResume = () => {
+      void resumePlayer(roomCode);
+    };
+    socket.on('connect', tryResume);
+    if (socket.connected) tryResume();
+    return () => {
+      socket.off('connect', tryResume);
+    };
+  }, [roomCode]);
 
   async function handleJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
