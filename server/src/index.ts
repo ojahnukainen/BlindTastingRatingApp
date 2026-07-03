@@ -6,7 +6,9 @@ import { logger } from './logger';
 import { createSocketServer } from './sockets';
 
 async function main(): Promise<void> {
-  await mongoose.connect(env.MONGODB_URI);
+  // Fail fast (and legibly) if the database is unreachable, instead of the
+  // default 30s server-selection hang.
+  await mongoose.connect(env.MONGODB_URI, { serverSelectionTimeoutMS: 10_000 });
   logger.info('Connected to MongoDB');
 
   const app = createApp();
@@ -28,6 +30,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  logger.error({ error }, 'Fatal startup error');
+  // Use the `err` key so pino serializes the message + stack (not just enumerable props).
+  logger.error({ err: error }, 'Fatal startup error');
   process.exit(1);
 });
