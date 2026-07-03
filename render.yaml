@@ -1,0 +1,26 @@
+# 1. The backend side
+-type: web
+name: rateTheBlindItems-api
+runtime: docker
+dockerfilePahth: ./server/Dockerfile
+dockerContext: ./server
+plan: free
+envVars:
+  - key: MONGODB_URI
+    sync: false
+  - key: CLIENT_ORIGIN
+    sync: false
+
+# 2. The frontend side
+-type: web
+name: rateTheBlindItems-client
+runtime: static
+buildCommand: npm ci && npm run build -w client
+staticPublishPath: ./client/dist
+routes:
+  -type: rewrite
+    source: /*
+    destination: /index.html
+envVars:
+  - key: VITE_API_URL
+    sync: false
