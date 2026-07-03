@@ -1,26 +1,64 @@
-# 1. The backend side
--type: web
-name: rateTheBlindItems-api
-runtime: docker
-dockerfilePahth: ./server/Dockerfile
-dockerContext: ./server
-plan: free
-envVars:
-  - key: MONGODB_URI
-    sync: false
-  - key: CLIENT_ORIGIN
-    sync: false
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploys two services:
+#   1. rateTheBlindItems-api    — Node/Express + Socket.IO API (built from server/Dockerfile)
+#   2. rateTheBlindItems-client — React client as a static site (Vite build, Render CDN)
+#
+# The database is NOT here: Render has no managed MongoDB. Create a free MongoDB Atlas
+# cluster (https://www.mongodb.com/atlas) and paste its connection string into the API's
+# MONGODB_URI env var after the first deploy.
+#
+# ── Two gotchas this file is written to avoid ────────────────────────────────
+# 1. "Dockerfile not found" / failed COPY: the server Dockerfile copies package-lock.json,
+#    shared/, server/ and client/ from the REPO ROOT, so the build context must be the repo
+#    root — hence `dockerContext: .` (NOT ./server) and no `rootDir`. Configuring by hand in
+#    the dashboard? Leave "Root Directory" BLANK, set "Dockerfile Path" to `server/Dockerfile`.
+# 2. The SPA rewrite (`source: /*`) is only valid on a STATIC site, not a Docker service.
+#    The frontend below is static, so it's fine. If the validator still complains, remove the
+#    `routes:` block and add the rewrite in the dashboard instead: Static site → Redirects/
+#    Rewrites → Source `/*`, Destination `/index.html`, Action `Rewrite`.
+#
+# ── After the FIRST deploy, set these env vars (they depend on the live URLs) ──
+#   API    → MONGODB_URI    = your Atlas connection string
+#   API    → CLIENT_ORIGIN  = https://rateTheBlindItems-client.onrender.com  (the client URL)
+#   CLIENT → VITE_API_URL    = https://rateTheBlindItems-api.onrender.com     (the api URL)
+#   CLIENT → VITE_SOCKET_URL = https://rateTheBlindItems-api.onrender.com     (the api URL)
+# Then redeploy the client so Vite rebuilds with the real API URL baked in.
 
-# 2. The frontend side
--type: web
-name: rateTheBlindItems-client
-runtime: static
-buildCommand: npm ci && npm run build -w client
-staticPublishPath: ./client/dist
-routes:
-  -type: rewrite
-    source: /*
-    destination: /index.html
-envVars:
-  - key: VITE_API_URL
-    sync: false
+services:
+  # ── 1. The backend side (Docker web service) ───────────────────────────────
+  - type: web
+    name: rateTheBlindItems-api
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: . # repo root — required by the Dockerfile's COPY paths
+    plan: free
+    region: frankfurt # closest free region to Northern Europe
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false # set in the dashboard (Atlas connection string — secret)
+      - key: CLIENT_ORIGIN
+        sync: false # set to the client URL after first deploy
+
+  # ── 2. The frontend side (static site) ─────────────────────────────────────
+  - type: web
+    name: rateTheBlindItems-client
+    runtime: static
+    buildCommand: npm ci && npm run build --workspace client
+    staticPublishPath: ./client/dist
+    autoDeploy: true
+    envVars:
+      # Vite inlines these at BUILD time — set them, then redeploy this service.
+      - key: VITE_API_URL
+        sync: false
+      - key: VITE_SOCKET_URL
+        sync: false
+    routes:
+      # SPA fallback: serve index.html for client-side routes.
+      - type: rewrite
+        source: /*
+        destination: /index.html
