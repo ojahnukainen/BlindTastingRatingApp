@@ -110,6 +110,19 @@ describe('gameService lifecycle', () => {
     expect(personal.ratings.every((entry) => entry.itemName !== 'Unknown')).toBe(true);
   });
 
+  it('builds samples in the host entered order (Sample N = Nth item)', async () => {
+    const game = await createGame();
+    await setItems(game, ['Coke', 'Pepsi', 'Sprite']);
+    await startGame(game);
+
+    // Sample 1 must be Coke, Sample 2 Pepsi, Sample 3 Sprite — the true order.
+    const names = game.samples.map(
+      (sample) => game.items.find((it) => it._id.equals(sample.itemId))?.name,
+    );
+    expect(game.samples.map((s) => s.sampleId)).toEqual(['s1', 's2', 's3']);
+    expect(names).toEqual(['Coke', 'Pepsi', 'Sprite']);
+  });
+
   it('rejects starting a game with too few items', async () => {
     const game = await createGame();
     await expect(setItems(game, ['only-one'])).rejects.toThrow();

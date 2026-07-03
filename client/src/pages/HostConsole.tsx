@@ -121,7 +121,12 @@ export function HostConsole() {
                     key={`${name}-${index}`}
                     className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm"
                   >
-                    <span>{name}</span>
+                    <span>
+                      <span className="mr-2 font-mono text-xs text-slate-400">
+                        Sample {index + 1}
+                      </span>
+                      {name}
+                    </span>
                     <button
                       type="button"
                       onClick={() => setItems((prev) => prev.filter((_, i) => i !== index))}
@@ -135,7 +140,8 @@ export function HostConsole() {
               </ul>
             )}
             <p className="text-xs text-slate-500">
-              Add between {MIN_ITEMS} and {MAX_ITEMS} items.
+              Add between {MIN_ITEMS} and {MAX_ITEMS} items. This is the real order — arrange your
+              physical samples so Sample 1 is the first item, and players guess it.
             </p>
             <Button variant="secondary" onClick={handleSaveItems} disabled={items.length < MIN_ITEMS || !dirty}>
               {dirty ? 'Save items' : 'Saved'}

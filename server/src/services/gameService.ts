@@ -67,20 +67,27 @@ export async function setItems(game: GameDoc, names: string[]): Promise<GameDoc>
   return game;
 }
 
-/** Build the public "game started" payload (samples + shuffled option pool). */
+/** Items in the host's entered order — this is the real order players must guess. */
+function orderedItems(game: GameDoc) {
+  return [...game.items].sort((a, b) => a.order - b.order);
+}
+
+/** Build the public "game started" payload (samples in real order + shuffled options). */
 export function buildStartedData(game: GameDoc): GameStartedData {
   const samples: PublicSample[] = game.samples.map((sample) => ({
     id: sample.sampleId,
     label: sample.label,
   }));
-  const options: OptionChip[] = shuffle(game.items).map((item) => ({
+  // The option chips ARE shuffled so the draggable choices don't reveal the
+  // answer — but the samples themselves keep the host's true order.
+  const options: OptionChip[] = shuffle(orderedItems(game)).map((item) => ({
     id: item._id.toString(),
     name: item.name,
   }));
   return { status: 'active', samples, options };
 }
 
-/** Shuffle items into anonymized samples and move the game to `active`. */
+/** Snapshot items into ordered samples (Sample N = the host's Nth item) and go active. */
 export async function startGame(game: GameDoc): Promise<GameStartedData> {
   if (game.status !== 'lobby') {
     throw new ServiceError('Game has already started', 409);
@@ -89,7 +96,9 @@ export async function startGame(game: GameDoc): Promise<GameStartedData> {
     throw new ServiceError(`Add at least ${MIN_ITEMS} items before starting`);
   }
   game.samples.splice(0, game.samples.length);
-  shuffle(game.items).forEach((item, index) => {
+  // Preserve the host's order: Sample 1 = first item entered, and so on. The
+  // host arranges the physical samples to match; players guess this order.
+  orderedItems(game).forEach((item, index) => {
     game.samples.push({
       sampleId: `s${index + 1}`,
       itemId: item._id,
